@@ -1,0 +1,7 @@
+# GPX-Trackdateien aus dem Datenverzeichnis
+/daten/*.gpx
+/daten/*.GPX 
+# SQLite-Datenbanken
+*.db
+
+/_pycache__/
