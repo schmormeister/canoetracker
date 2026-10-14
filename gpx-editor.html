@@ -87,8 +87,21 @@
         <label>Zeitraum zum Löschen</label>
         <div class="range"><input id="fromTime" type="datetime-local" step="1" disabled><input id="toTime" type="datetime-local" step="1" disabled></div>
         <button id="deleteButton" class="primary" disabled>Markierten Zeitraum löschen</button>
+        <label for="speedThresholdPercent">Geschwindigkeitsfilter</label>
+        <select id="speedThresholdPercent" disabled>
+          <option value="10">10% über Mittelwert</option>
+          <option value="20">20% über Mittelwert</option>
+          <option value="30">30% über Mittelwert</option>
+          <option value="40">40% über Mittelwert</option>
+          <option value="50">50% über Mittelwert</option>
+          <option value="60">60% über Mittelwert</option>
+          <option value="70" selected>70% über Mittelwert</option>
+          <option value="80">80% über Mittelwert</option>
+          <option value="90">90% über Mittelwert</option>
+        </select>
+        <div id="speedFilterInfo" class="hint">Der Filter entfernt den Zielpunkt jedes Abschnitts oberhalb des Grenzwerts. Wegpunkte bleiben erhalten; die Originaldatei bleibt unverändert.</div>
+        <button id="filterSpeedButton" class="secondary" disabled>Geschwindigkeits-Ausreißer filtern</button>
         <button id="clearButton" class="secondary" disabled>Auswahl zurücksetzen</button>
-        <p class="hint">Es werden alle Trackpunkte inklusive Zeitstempel innerhalb des Zeitraums entfernt. Wegpunkte bleiben erhalten.</p>
       </aside>
       <section class="content">
         <div id="emptyState" class="panel empty"><div><div class="mark">＋</div><h2>Bereit für deine GPX-Datei</h2><p>Öffne links eine Datei. Danach siehst du die zeitliche Abdeckung und kannst Abschnitte präzise ausschneiden.</p></div></div>
@@ -139,6 +152,14 @@
       const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
       return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     };
+    const speedSegments = points => points.slice(1).map((entry, index) => {
+      const previous = points[index]; const hours = (entry.date - previous.date) / 3600000;
+      return { entry, speed: hours > 0 ? distanceKm(previous.point, entry.point) / hours : null };
+    }).filter(segment => segment.speed !== null && Number.isFinite(segment.speed));
+    const meanSpeed = points => {
+      const segments = speedSegments(points);
+      return segments.length ? segments.reduce((total, segment) => total + segment.speed, 0) / segments.length : null;
+    };
     function loadFile(file) { const reader = new FileReader(); reader.onload = () => parseGpx(reader.result, file.name); reader.onerror = () => showNotice('Die GPX-Datei konnte nicht geöffnet werden.'); reader.readAsText(file); }
     function parseGpx(text, name) {
       const normalizedText = String(text).replace(/<\?xml[^>]*\?>/gi, '').trim();
@@ -149,7 +170,7 @@
       if (!state.tracks.length) return showNotice('Diese Datei enthält keinen Track mit Trackpunkten.');
       $('fileInfo').textContent = `${name} · ${state.tracks.length} Track${state.tracks.length === 1 ? '' : 's'}`;
       $('trackSelect').innerHTML = state.tracks.map((track, i) => `<option value="${i}">${escapeHtml(track.name)}</option>`).join('');
-      $('trackSelect').disabled = false; $('fromTime').disabled = false; $('toTime').disabled = false; $('deleteButton').disabled = false; $('clearButton').disabled = false;
+      $('trackSelect').disabled = false; $('fromTime').disabled = false; $('toTime').disabled = false; $('deleteButton').disabled = false; $('speedThresholdPercent').disabled = false; $('filterSpeedButton').disabled = false; $('clearButton').disabled = false;
       $('emptyState').style.display = 'none'; $('dashboard').classList.add('show'); selectTrack();
     }
     function selectTrack() {
@@ -166,6 +187,7 @@
       const points = track.points || []; const first = points[0]?.date, last = points.at(-1)?.date; $('pointCount').textContent = points.length; $('startTime').textContent = first ? `${formatDate(first)} ${formatClock(first)}` : '–'; $('endTime').textContent = last ? `${formatDate(last)} ${formatClock(last)}` : '–'; $('tickStart').textContent = first ? `${formatDate(first)} ${formatClock(first)}` : '–'; $('tickEnd').textContent = last ? `${formatDate(last)} ${formatClock(last)}` : '–'; $('status').textContent = first && last ? `${formatClock(first)} bis ${formatClock(last)} · ${trackTimeZone} · ${points.length} Punkte` : 'Keine gültigen Zeitstempel';
       const from = parseInputTime($('fromTime').value), to = parseInputTime($('toTime').value); const span = last - first || 1; $('selection').style.left = first && !Number.isNaN(from.valueOf()) ? `${Math.max(0, Math.min(100, (from-first)/span*100))}%` : '0%'; $('selection').style.right = last && !Number.isNaN(to.valueOf()) ? `${Math.max(0, Math.min(100, (last-to)/span*100))}%` : '100%';
       $('pointRows').innerHTML = points.slice(0, 500).map(({point,date}, i) => { const selected = !Number.isNaN(from.valueOf()) && !Number.isNaN(to.valueOf()) && date >= from && date <= to; const coords = [point.getAttribute('lat'), point.getAttribute('lon')]; return `<tr class="${selected ? 'selected-row' : ''}"><td>${i+1}</td><td class="mono">${formatDate(date)}</td><td class="mono">${formatClock(date)}</td><td>${coords[0] || '–'}</td><td>${coords[1] || '–'}</td></tr>`; }).join('');
+      renderSpeedFilterInfo(points);
       renderMap(track.allPoints || points);
       renderSpeedChart(points, from, to);
     }
@@ -179,19 +201,39 @@
       setTimeout(() => trackMap.invalidateSize(), 0);
     }
     function renderSpeedChart(points, from, to) {
-      const samples = points.slice(1).map((entry, index) => {
-        const previous = points[index]; const hours = (entry.date - previous.date) / 3600000;
-        return { label: formatClock(entry.date), speed: hours > 0 ? distanceKm(previous.point, entry.point) / hours : null, selected: entry.date >= from && entry.date <= to };
-      }).filter(sample => sample.speed !== null && Number.isFinite(sample.speed));
+      const samples = speedSegments(points).map(({entry, speed}) => ({ label: formatClock(entry.date), speed, selected: entry.date >= from && entry.date <= to }));
       if (speedChart) speedChart.destroy();
       speedChart = new Chart($('speedChart'), { type:'line', data:{ labels:samples.map(sample => sample.label), datasets:[{ label:'km/h', data:samples.map(sample => Number(sample.speed.toFixed(2))), borderColor:'#d85c4a', backgroundColor:'#d85c4a22', pointRadius:samples.map(sample => sample.selected ? 4 : (samples.length > 100 ? 0 : 2)), pointBackgroundColor:samples.map(sample => sample.selected ? '#f3c969' : '#087f78'), pointBorderColor:samples.map(sample => sample.selected ? '#d85c4a' : '#087f78'), tension:.2, fill:true }] }, options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false }, scales:{ x:{ ticks:{ maxTicksLimit:8 } }, y:{ beginAtZero:true, title:{ display:true, text:'km/h' } } }, plugins:{ legend:{ display:false } } } });
+    }
+    function renderSpeedFilterInfo(points) {
+      const average = meanSpeed(points);
+      if (average === null) return $('speedFilterInfo').textContent = 'Für diesen Track lässt sich kein Geschwindigkeitsmittelwert berechnen.';
+      const percent = Number($('speedThresholdPercent').value);
+      const limit = average * (1 + percent / 100);
+      $('speedFilterInfo').textContent = `Mittelwert: ${average.toFixed(1)} km/h · Grenzwert bei ${percent}%: ${limit.toFixed(1)} km/h`;
+    }
+    function filterSpeedOutliers() {
+      const track = state.tracks[Number($('trackSelect').value)];
+      if (!track) return;
+      const points = track.points || [];
+      const average = meanSpeed(points);
+      if (average === null) return showNotice('Für diesen Track lässt sich kein Geschwindigkeitsmittelwert berechnen.');
+      const percent = Number($('speedThresholdPercent').value);
+      const limit = average * (1 + percent / 100);
+      const targets = speedSegments(points).filter(({speed}) => speed > limit).map(({entry}) => entry.point);
+      if (!targets.length) return showNotice(`Keine Abschnitte über ${limit.toFixed(1)} km/h gefunden.`, true);
+      targets.forEach(point => point.parentNode?.removeChild(point));
+      track.allPoints = xmlPoints(track.element).map(point => ({ point, date: new Date(xmlText(point, 'time')) }));
+      track.points = track.allPoints.filter(({date}) => !Number.isNaN(date.valueOf()));
+      showNotice(`${targets.length} GPS-Ausreißer über ${limit.toFixed(1)} km/h entfernt (${percent}% über dem Mittelwert von ${average.toFixed(1)} km/h).`, true);
+      renderTrack(track);
     }
     function deleteRange() { const track = state.tracks[Number($('trackSelect').value)]; const from = parseInputTime($('fromTime').value), to = parseInputTime($('toTime').value); if (Number.isNaN(from.valueOf()) || Number.isNaN(to.valueOf()) || from > to) return showNotice('Bitte einen gültigen Zeitraum angeben.'); const targets = (track.points || []).filter(({date}) => date >= from && date <= to); if (!targets.length) return showNotice('Im gewählten Zeitraum wurden keine Trackpunkte gefunden.'); targets.forEach(({point}) => point.parentNode?.removeChild(point)); track.allPoints = xmlPoints(track.element).map(point => ({ point, date: new Date(xmlText(point, 'time')) })); track.points = track.allPoints.filter(({date}) => !Number.isNaN(date.valueOf())); showNotice(`${targets.length} Trackpunkt${targets.length === 1 ? '' : 'e'} gelöscht.`, true); renderTrack(track); }
     function clearRange() { selectTrack(); $('notice').classList.remove('show'); }
     function exportGpx() { const output = new XMLSerializer().serializeToString(state.xml); const blob = new Blob([`<?xml version="1.0" encoding="UTF-8"?>\n${output}`], {type:'application/gpx+xml'}); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = state.fileName; link.click(); URL.revokeObjectURL(link.href); }
     function showNotice(message, success=false) { $('notice').textContent = message; $('notice').style.background = success ? '#e2f2ed' : '#fff1d5'; $('notice').style.color = success ? '#17655b' : '#73531e'; $('notice').classList.add('show'); }
     function escapeHtml(value) { return value.replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char])); }
-    $('fileInput').addEventListener('click', event => { event.target.value = ''; }); $('fileInput').addEventListener('change', event => event.target.files[0] && loadFile(event.target.files[0])); $('trackSelect').addEventListener('change', selectTrack); $('fromTime').addEventListener('input', () => renderTrack(state.tracks[Number($('trackSelect').value)])); $('toTime').addEventListener('input', () => renderTrack(state.tracks[Number($('trackSelect').value)])); $('deleteButton').addEventListener('click', deleteRange); $('clearButton').addEventListener('click', clearRange); $('exportButton').addEventListener('click', exportGpx);
+    $('fileInput').addEventListener('click', event => { event.target.value = ''; }); $('fileInput').addEventListener('change', event => event.target.files[0] && loadFile(event.target.files[0])); $('trackSelect').addEventListener('change', selectTrack); $('fromTime').addEventListener('input', () => renderTrack(state.tracks[Number($('trackSelect').value)])); $('toTime').addEventListener('input', () => renderTrack(state.tracks[Number($('trackSelect').value)])); $('speedThresholdPercent').addEventListener('change', () => renderSpeedFilterInfo(state.tracks[Number($('trackSelect').value)]?.points || [])); $('deleteButton').addEventListener('click', deleteRange); $('filterSpeedButton').addEventListener('click', filterSpeedOutliers); $('clearButton').addEventListener('click', clearRange); $('exportButton').addEventListener('click', exportGpx);
     const drop = $('dropZone'); ['dragenter','dragover'].forEach(type => drop.addEventListener(type, event => { event.preventDefault(); drop.classList.add('over'); })); ['dragleave','drop'].forEach(type => drop.addEventListener(type, event => { event.preventDefault(); drop.classList.remove('over'); })); drop.addEventListener('drop', event => event.dataTransfer.files[0] && loadFile(event.dataTransfer.files[0]));
   </script>
 </body>

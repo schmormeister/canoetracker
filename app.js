@@ -1,5 +1,6 @@
 const WEATHER_OPTIONS = [
   "Regen",
+  "Schnee",
   "Sonne",
   "Gewitter",
   "Nebel",

@@ -46,7 +46,7 @@ Diese Routen liefert der lokale Webserver für das Frontend aus:
 - `GET /index.html`
   HTML-Datei der Anwendung
 - `GET /gpx-editor.html`
-  GPX-Zeit-Editor zum lokalen Entfernen von Trackpunkt-Zeiträumen
+  Lokaler GPX-Editor zum Entfernen von Trackpunkt-Zeiträumen und zum Filtern von GPS-Ausreißern anhand der Abschnittsgeschwindigkeit. Der Filter entfernt Zielpunkte von Abschnitten, deren Geschwindigkeit den ausgewählten Grenzwert von 10 bis 90 Prozent über dem mittleren Geschwindigkeitswert überschreitet.
 - `GET /track-analyse.html`
   Track-Analyse mit Karte, Geschwindigkeitschart und Kennzahlen. Ein gespeicherter Track kann über `?track=DATEINAME.gpx` direkt geöffnet werden.
 - `GET /styles.css`
@@ -289,7 +289,7 @@ projektverzeichnis/
   Frontend-Logik für Formulare, Filter, API-Aufrufe und Karte
 
 - [gpx-editor.html](gpx-editor.html)
-  Lokaler Editor zum Entfernen von Zeitbereichen aus GPX-Dateien
+  Lokaler Editor zum Entfernen von Zeitbereichen und GPS-Ausreißern aus GPX-Dateien. Der Geschwindigkeitsfilter bietet Grenzwerte von 10 bis 90 Prozent über dem mittleren Abschnittsgeschwindigkeitswert; die bereinigte Datei wird exportiert, die Originaldatei bleibt unverändert.
 
 - [track-analyse.html](track-analyse.html)
   Analyse von GPX-Tracks mit Karte, Kennzahlen und Geschwindigkeitschart
