@@ -1,5 +1,7 @@
 # Paddelstrecken Webapp
 
+[![Bildschirmfoto-vom-2026-09-16-19-39-37.png](https://i.postimg.cc/jqggVzTK/Bildschirmfoto-vom-2026-09-16-19-39-37.png)](https://postimg.cc/NLX7m2LP)
+
 Lokale Webanwendung zur Erfassung von Paddelstrecken mit:
 
 - Streckenverwaltung
