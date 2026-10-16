@@ -42,6 +42,8 @@ const selectedRouteLabel = document.querySelector("#selectedRouteLabel");
 const entryMode = document.querySelector("#entryMode");
 const trackChoice = document.querySelector("#trackChoice");
 const trackFile = document.querySelector("#trackFile");
+const createCsvExportButton = document.querySelector("#createCsvExport");
+const downloadCsvExportLink = document.querySelector("#downloadCsvExport");
 
 let waters = [];
 let routes = [];
@@ -53,6 +55,7 @@ let geocodeCache = loadObjectStorage(STORAGE_KEYS.geocodeCache, {});
 let routeMap = null;
 let routeMarker = null;
 let tracks = [];
+let csvExportUrl = null;
 
 function loadObjectStorage(key, fallback) {
   const rawValue = localStorage.getItem(key);
@@ -466,6 +469,76 @@ function getFilteredRoutes() {
   });
 }
 
+function formatCsvDateTime(value) {
+  if (!value) {
+    return { date: "", time: "" };
+  }
+
+  const [datePart = "", timePart = ""] = String(value).split("T");
+  const [year, month, day] = datePart.split("-");
+  return {
+    date: year && month && day ? `${day}.${month}.${year}` : datePart,
+    time: timePart.slice(0, 5),
+  };
+}
+
+function escapeCsvValue(value) {
+  const text = String(value ?? "");
+  return /[;,"\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function createRoutesCsv(filteredRoutes) {
+  const headers = [
+    "Startdatum",
+    "Startzeit",
+    "Enddatum",
+    "Endzeit",
+    "Status",
+    "Gewässer",
+    "von",
+    "bis",
+    "Kilometer",
+    "Bemerkung",
+    "Bootsname",
+  ];
+  const rows = filteredRoutes.map((route) => {
+    const start = formatCsvDateTime(route.start_time);
+    const end = formatCsvDateTime(route.end_time);
+    const water = getWaterById(route.water_body);
+    const startDate = route.start_time ? new Date(route.start_time) : null;
+    const status = startDate && startDate > new Date() ? "geplant" : "beendet";
+    const remarks = [route.name]
+      .filter((value) => value !== null && value !== undefined && value !== "")
+      .join(", ");
+
+    return [
+      start.date,
+      start.time,
+      end.date,
+      end.time,
+      status,
+      water?.name || route.water_body || "",
+      route.start_location,
+      route.end_location,
+      Math.round(Number(route.distance_km)),
+      remarks,
+      "",
+    ];
+  });
+
+  return `\uFEFF${[headers, ...rows].map((row) => row.map(escapeCsvValue).join(";")).join("\r\n")}`;
+}
+
+function clearCsvExport() {
+  if (csvExportUrl) {
+    URL.revokeObjectURL(csvExportUrl);
+    csvExportUrl = null;
+  }
+  downloadCsvExportLink.removeAttribute("href");
+  downloadCsvExportLink.hidden = true;
+  downloadCsvExportLink.textContent = "CSV herunterladen";
+}
+
 function renderWaters() {
   const sortedWaters = waters
     .slice()
@@ -716,6 +789,7 @@ function ensureWeatherAndTypeOptions() {
 }
 
 async function refreshAndRender() {
+  clearCsvExport();
   await loadData();
   populateRouteDateFilters();
   renderWaters();
@@ -840,14 +914,17 @@ waterForm.addEventListener("submit", async (event) => {
 });
 
 routeFilterForm.addEventListener("input", () => {
+  clearCsvExport();
   renderRoutes();
 });
 
 routeFilterForm.addEventListener("change", () => {
+  clearCsvExport();
   renderRoutes();
 });
 
 routeFilterForm.addEventListener("reset", () => {
+  clearCsvExport();
   requestAnimationFrame(() => {
     const now = new Date();
     routeFilterForm.elements.year.value = String(now.getFullYear());
@@ -992,6 +1069,23 @@ routeTableBody.addEventListener("click", async (event) => {
     selectedRouteId = row.dataset.selectRoute;
     renderRoutes();
   }
+});
+
+createCsvExportButton.addEventListener("click", () => {
+  clearCsvExport();
+  const filteredRoutes = getFilteredRoutes();
+  const csv = createRoutesCsv(filteredRoutes);
+  csvExportUrl = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  downloadCsvExportLink.href = csvExportUrl;
+  const createdAt = new Date();
+  const date = [
+    createdAt.getFullYear(),
+    String(createdAt.getMonth() + 1).padStart(2, "0"),
+    String(createdAt.getDate()).padStart(2, "0"),
+  ].join("-");
+  downloadCsvExportLink.download = `paddelstrecken-${date}.csv`;
+  downloadCsvExportLink.textContent = `CSV herunterladen (${filteredRoutes.length} Strecken)`;
+  downloadCsvExportLink.hidden = false;
 });
 
 async function initializeApp() {

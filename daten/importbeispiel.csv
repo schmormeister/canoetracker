@@ -1,0 +1,4 @@
+Startdatum;Startzeit;Enddatum;Endzeit;Status;Gewässer;von;bis;Kilometer;Bemerkung;Bootsname
+14.10.2020;;;;beendet;Fluss A;Einstieg;Ausstieg;10;beliebiger Kommentartext;könnte hier hin
+15.10.2020;10:00;15.10.2020;14:00;beendet;Fluss A;Anfang;Ende;20;;
+25.10.2020;;;;geplant;Fluss B;Hier;Dort;30;;

@@ -67,6 +67,8 @@ Beim Anlegen einer Strecke stehen zwei Erfassungsarten zur Verfügung:
 
 Nach dem Speichern zeigt die Historie bei Track-Strecken einen Link zur Track-Analyse. Dort kann beim Überfahren eines Geschwindigkeitspunkts der zugehörige Punkt auf der Karte angezeigt werden.
 
+In **Erfasste Strecken** erzeugt **CSV erstellen** einen Export der aktuell durch Suche und Filter angezeigten Strecken. Der Download verwendet die Spalten aus `daten/importbeispiel.csv`; „Bemerkung“ enthält Name, Dauer und Geschwindigkeit als kommagetrennte Werte. GPX-Tracklinks werden nicht exportiert.
+
 ### Gewässer
 
 - `GET /api/waters`
